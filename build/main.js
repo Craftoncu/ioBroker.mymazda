@@ -1,7 +1,4 @@
 "use strict";
-/*
- * Created with @iobroker/create-adapter v2.0.1
- */
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
@@ -21,12 +18,12 @@ var __importStar = (this && this.__importStar) || function (mod) {
     __setModuleDefault(result, mod);
     return result;
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-// The adapter-core module gives you access to the core ioBroker functions
-// you need to create an adapter
 const utils = __importStar(require("@iobroker/adapter-core"));
-// Load your modules here, e.g.:
-// import * as fs from "fs";
+const node_mymazda_1 = __importDefault(require("node-mymazda"));
 class Mymazda extends utils.Adapter {
     constructor(options = {}) {
         super({
@@ -35,93 +32,35 @@ class Mymazda extends utils.Adapter {
         });
         this.on('ready', this.onReady.bind(this));
         this.on('stateChange', this.onStateChange.bind(this));
-        // this.on('objectChange', this.onObjectChange.bind(this));
+        this.on('objectChange', this.onObjectChange.bind(this));
         // this.on('message', this.onMessage.bind(this));
         this.on('unload', this.onUnload.bind(this));
     }
-    /**
-     * Is called when databases are connected and adapter received configuration.
-     */
     async onReady() {
-        // Initialize your adapter here
-        // Reset the connection indicator during startup
-        this.setState('info.connection', false, true);
-        // The adapters config (in the instance object everything under the attribute "native") is accessible via
-        // this.config:
-        this.log.info('config option1: ' + this.config.option1);
-        this.log.info('config option2: ' + this.config.option2);
-        /*
-        For every state in the system there has to be also an object of type state
-        Here a simple template for a boolean variable named "testVariable"
-        Because every adapter instance uses its own unique namespace variable names can't collide with other adapters variables
-        */
-        await this.setObjectNotExistsAsync('testVariable', {
-            type: 'state',
-            common: {
-                name: 'testVariable',
-                type: 'boolean',
-                role: 'indicator',
-                read: true,
-                write: true,
-            },
-            native: {},
-        });
-        // In order to get state updates, you need to subscribe to them. The following line adds a subscription for our variable we have created above.
-        this.subscribeStates('testVariable');
-        // You can also add a subscription for multiple states. The following line watches all states starting with "lights."
-        // this.subscribeStates('lights.*');
-        // Or, if you really must, you can also watch all states. Don't do this if you don't need to. Otherwise this will cause a lot of unnecessary load on the system:
-        // this.subscribeStates('*');
-        /*
-            setState examples
-            you will notice that each setState will cause the stateChange event to fire (because of above subscribeStates cmd)
-        */
-        // the variable testVariable is set to true as command (ack=false)
-        await this.setStateAsync('testVariable', true);
-        // same thing, but the value is flagged "ack"
-        // ack should be always set to true if the value is received from or acknowledged from the target system
-        await this.setStateAsync('testVariable', { val: true, ack: true });
-        // same thing, but the state is deleted after 30s (getState will return null afterwards)
-        await this.setStateAsync('testVariable', { val: true, ack: true, expire: 30 });
-        // examples for the checkPassword/checkGroup functions
-        let result = await this.checkPasswordAsync('admin', 'iobroker');
-        this.log.info('check user admin pw iobroker: ' + result);
-        result = await this.checkGroupAsync('admin', 'admin');
-        this.log.info('check group user admin group admin: ' + result);
+        this.log.debug('Configured Mazda Region ' + this.config.region);
+        this.client = new node_mymazda_1.default(this.config.email, this.config.password, this.config.region);
+        this.path = 'mymazda.';
+        this.setState('info.connection', true, true);
+        await this.fetchData();
     }
-    /**
-     * Is called when adapter shuts down - callback has to be called under any circumstances!
-     */
     onUnload(callback) {
         try {
-            // Here you must clear all timeouts or intervals that may still be active
-            // clearTimeout(timeout1);
-            // clearTimeout(timeout2);
-            // ...
-            // clearInterval(interval1);
             callback();
         }
         catch (e) {
             callback();
         }
     }
-    // If you need to react to object changes, uncomment the following block and the corresponding line in the constructor.
-    // You also need to subscribe to the objects with `this.subscribeObjects`, similar to `this.subscribeStates`.
-    // /**
-    //  * Is called if a subscribed object changes
-    //  */
-    // private onObjectChange(id: string, obj: ioBroker.Object | null | undefined): void {
-    // 	if (obj) {
-    // 		// The object was changed
-    // 		this.log.info(`object ${id} changed: ${JSON.stringify(obj)}`);
-    // 	} else {
-    // 		// The object was deleted
-    // 		this.log.info(`object ${id} deleted`);
-    // 	}
-    // }
-    /**
-     * Is called if a subscribed state changes
-     */
+    onObjectChange(id, obj) {
+        if (obj) {
+            // The object was changed
+            this.log.info(`object ${id} changed: ${JSON.stringify(obj)}`);
+        }
+        else {
+            // The object was deleted
+            this.log.info(`object ${id} deleted`);
+        }
+    }
     onStateChange(id, state) {
         if (state) {
             // The state was changed
@@ -132,13 +71,51 @@ class Mymazda extends utils.Adapter {
             this.log.info(`state ${id} deleted`);
         }
     }
+    async fetchData() {
+        var _a;
+        let vehicles;
+        // eslint-disable-next-line prefer-const
+        vehicles = await ((_a = this.client) === null || _a === void 0 ? void 0 : _a.getVehicles());
+        this.log.debug(vehicles);
+        for (const vehicle of vehicles) {
+            const vehicle_id = vehicle.id;
+            //let status = this.client?.getVehicleStatus(vehicle_id)
+            await this.createVehicleObjectsIfNotExists(vehicle_id);
+        }
+    }
+    // necessary batterypercentage, locked, drivenDistance
+    async createVehicleObjectsIfNotExists(vehicle_id) {
+        this.log.info(String(vehicle_id));
+        if (this.path) {
+            this.createState(this.path, String('vehicle_id'), 'battery', {
+                read: true,
+                write: true,
+                desc: 'Testdesc',
+                type: 'boolean',
+            });
+        }
+    }
+    async createObjectIfNotExists(identifier, type, datatype, name, desc, role, read, write) {
+        await this.setObjectNotExistsAsync(identifier + '.' + name, {
+            type: type,
+            common: {
+                name: desc,
+                role: role,
+                type: datatype,
+                read: read,
+                write: write
+            },
+            native: {}
+        });
+        if (write) {
+            this.subscribeStates(identifier + '.' + name);
+        }
+    }
 }
 if (require.main !== module) {
-    // Export the constructor in compact mode
     module.exports = (options) => new Mymazda(options);
 }
 else {
-    // otherwise start the instance directly
     (() => new Mymazda())();
 }
 //# sourceMappingURL=main.js.map
