@@ -1,15 +1,10 @@
-/*
- * Created with @iobroker/create-adapter v2.0.1
- */
-
-// The adapter-core module gives you access to the core ioBroker functions
-// you need to create an adapter
 import * as utils from '@iobroker/adapter-core';
-
-// Load your modules here, e.g.:
-// import * as fs from "fs";
+import MyMazda from 'node-mymazda';
+import {RegionCode} from 'node-mymazda/dist/MyMazdaAPIConnection';
 
 class Mymazda extends utils.Adapter {
+
+	private client: MyMazda | undefined;
 
 	public constructor(options: Partial<utils.AdapterOptions> = {}) {
 		super({
@@ -18,106 +13,42 @@ class Mymazda extends utils.Adapter {
 		});
 		this.on('ready', this.onReady.bind(this));
 		this.on('stateChange', this.onStateChange.bind(this));
-		// this.on('objectChange', this.onObjectChange.bind(this));
-		// this.on('message', this.onMessage.bind(this));
+		this.on('objectChange', this.onObjectChange.bind(this));
 		this.on('unload', this.onUnload.bind(this));
 	}
 
-	/**
-	 * Is called when databases are connected and adapter received configuration.
-	 */
 	private async onReady(): Promise<void> {
-		// Initialize your adapter here
+		this.log.debug('Configured MyMazda account settings ' + this.config.region + ' @ ' + this.config.email)
 
-		// Reset the connection indicator during startup
-		this.setState('info.connection', false, true);
-
-		// The adapters config (in the instance object everything under the attribute "native") is accessible via
-		// this.config:
-		this.log.info('config option1: ' + this.config.option1);
-		this.log.info('config option2: ' + this.config.option2);
-
-		/*
-		For every state in the system there has to be also an object of type state
-		Here a simple template for a boolean variable named "testVariable"
-		Because every adapter instance uses its own unique namespace variable names can't collide with other adapters variables
-		*/
-		await this.setObjectNotExistsAsync('testVariable', {
-			type: 'state',
-			common: {
-				name: 'testVariable',
-				type: 'boolean',
-				role: 'indicator',
-				read: true,
-				write: true,
-			},
-			native: {},
-		});
-
-		// In order to get state updates, you need to subscribe to them. The following line adds a subscription for our variable we have created above.
-		this.subscribeStates('testVariable');
-		// You can also add a subscription for multiple states. The following line watches all states starting with "lights."
-		// this.subscribeStates('lights.*');
-		// Or, if you really must, you can also watch all states. Don't do this if you don't need to. Otherwise this will cause a lot of unnecessary load on the system:
-		// this.subscribeStates('*');
-
-		/*
-			setState examples
-			you will notice that each setState will cause the stateChange event to fire (because of above subscribeStates cmd)
-		*/
-		// the variable testVariable is set to true as command (ack=false)
-		await this.setStateAsync('testVariable', true);
-
-		// same thing, but the value is flagged "ack"
-		// ack should be always set to true if the value is received from or acknowledged from the target system
-		await this.setStateAsync('testVariable', { val: true, ack: true });
-
-		// same thing, but the state is deleted after 30s (getState will return null afterwards)
-		await this.setStateAsync('testVariable', { val: true, ack: true, expire: 30 });
-
-		// examples for the checkPassword/checkGroup functions
-		let result = await this.checkPasswordAsync('admin', 'iobroker');
-		this.log.info('check user admin pw iobroker: ' + result);
-
-		result = await this.checkGroupAsync('admin', 'admin');
-		this.log.info('check group user admin group admin: ' + result);
+		this.setState('info.connection', true, true);
+		await this.fetchData()
 	}
 
-	/**
-	 * Is called when adapter shuts down - callback has to be called under any circumstances!
-	 */
-	private onUnload(callback: () => void): void {
-		try {
-			// Here you must clear all timeouts or intervals that may still be active
-			// clearTimeout(timeout1);
-			// clearTimeout(timeout2);
-			// ...
-			// clearInterval(interval1);
+	private async fetchData() {
+		this.log.debug('fetchData() called')
+		const client = new MyMazda(this.config.email, this.config.password, <RegionCode>this.config.region);
+		this.client = client;
 
-			callback();
-		} catch (e) {
-			callback();
+		//Loop through the registered vehicles
+		await client.getVehicles().then((vehicles) => {
+			vehicles.forEach(vehicle => {
+				this.setupVehicleStates(vehicle)
+				this.updateVehicleStates(vehicle)
+			})
+		})
+	}
+
+	private onObjectChange(id: string, obj: ioBroker.Object | null | undefined): void {
+		if (obj) {
+			// The object was changed
+			this.log.info(`object ${id} changed: ${JSON.stringify(obj)}`);
+		} else {
+			// The object was deleted
+			this.log.info(`object ${id} deleted`);
 		}
 	}
 
-	// If you need to react to object changes, uncomment the following block and the corresponding line in the constructor.
-	// You also need to subscribe to the objects with `this.subscribeObjects`, similar to `this.subscribeStates`.
-	// /**
-	//  * Is called if a subscribed object changes
-	//  */
-	// private onObjectChange(id: string, obj: ioBroker.Object | null | undefined): void {
-	// 	if (obj) {
-	// 		// The object was changed
-	// 		this.log.info(`object ${id} changed: ${JSON.stringify(obj)}`);
-	// 	} else {
-	// 		// The object was deleted
-	// 		this.log.info(`object ${id} deleted`);
-	// 	}
-	// }
 
-	/**
-	 * Is called if a subscribed state changes
-	 */
 	private onStateChange(id: string, state: ioBroker.State | null | undefined): void {
 		if (state) {
 			// The state was changed
@@ -128,29 +59,69 @@ class Mymazda extends utils.Adapter {
 		}
 	}
 
-	// If you need to accept messages in your adapter, uncomment the following block and the corresponding line in the constructor.
-	// /**
-	//  * Some message was sent to this instance over message box. Used by email, pushover, text2speech, ...
-	//  * Using this method requires "common.messagebox" property to be set to true in io-package.json
-	//  */
-	// private onMessage(obj: ioBroker.Message): void {
-	// 	if (typeof obj === 'object' && obj.message) {
-	// 		if (obj.command === 'send') {
-	// 			// e.g. send email or pushover or whatever
-	// 			this.log.info('send command');
+	private onUnload(callback: () => void): void {
+		try {
+			callback();
+		} catch (e) {
+			callback();
+		}
+	}
 
-	// 			// Send response in callback if required
-	// 			if (obj.callback) this.sendTo(obj.from, obj.command, 'Message received', obj.callback);
-	// 		}
-	// 	}
-	// }
+	// iobroker role norm: https://github.com/ioBroker/ioBroker/blob/master/doc/STATE_ROLES.md
+	private async setupVehicleStates(vehicle: any) { //todo fix with Client.Vehicle
+		//todo check if already available and exclude non-electric cars
+
+		//nickname
+		await this.createStateAsync(vehicle.vin, 'info', 'nickname', {
+			read: true,
+			role: 'info.name',
+			write: true,
+			desc: 'Nickname of vehicle',
+			type: 'string',
+		});
+
+		//kilometer
+		await this.createStateAsync(vehicle.vin, '', 'odometerkm', {
+			read: true,
+			role: 'value.distance',
+			write: true,
+			desc: 'Kilometer counter',
+			type: 'number',
+		});
+
+
+		//battery
+		if (vehicle.isElectric) {
+			await this.createStateAsync(vehicle.vin, '', 'battery', {
+				read: true,
+				role: 'value.battery',
+				write: true,
+				desc: 'Battery percentage',
+				type: 'number',
+			});
+		}
+	}
+
+	private async updateVehicleStates(vehicle: any){
+		await this.setStateAsync(vehicle.vin + '.info'+ '.nickname', vehicle.nickname)
+
+		//normal states
+		this.client?.getVehicleStatus(vehicle.id).then(vehicleStatus => {
+			this.setStateAsync(vehicle.vin + '.odometerkm', vehicleStatus.odometerKm)
+		})
+
+		// electro specific stuff
+		if (vehicle.isElectric) {
+			this.client?.getEVVehicleStatus(vehicle.id).then(evVehicleStatus => {
+				this.setStateAsync(vehicle.vin + '.battery', evVehicleStatus.chargeInfo.batteryLevelPercentage)
+			})
+		}
+	}
 
 }
 
 if (require.main !== module) {
-	// Export the constructor in compact mode
 	module.exports = (options: Partial<utils.AdapterOptions> | undefined) => new Mymazda(options);
 } else {
-	// otherwise start the instance directly
 	(() => new Mymazda())();
 }
