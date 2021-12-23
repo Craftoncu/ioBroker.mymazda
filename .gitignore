@@ -198,6 +198,7 @@ web_modules/
 
 # Optional npm cache directory
 .npm
+build/
 
 # Optional eslint cache
 .eslintcache
@@ -281,3 +282,4 @@ dist
 /.dev-server/
 /.vscode/
 package-lock.json
+/build/
