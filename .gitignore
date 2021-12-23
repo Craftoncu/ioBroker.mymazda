@@ -282,4 +282,3 @@ dist
 /.dev-server/
 /.vscode/
 /build/
-package-lock.json
