@@ -1,12 +1,10 @@
 import * as utils from '@iobroker/adapter-core';
 import MyMazda from 'node-mymazda';
 import {RegionCode} from 'node-mymazda/dist/MyMazdaAPIConnection';
-import MyMazdaAPIClient from 'node-mymazda';
 
 class Mymazda extends utils.Adapter {
 
-	private client? : MyMazdaAPIClient;
-	private path? : string;
+	private client: MyMazda | undefined;
 
 	public constructor(options: Partial<utils.AdapterOptions> = {}) {
 		super({
@@ -16,26 +14,29 @@ class Mymazda extends utils.Adapter {
 		this.on('ready', this.onReady.bind(this));
 		this.on('stateChange', this.onStateChange.bind(this));
 		this.on('objectChange', this.onObjectChange.bind(this));
-		// this.on('message', this.onMessage.bind(this));
 		this.on('unload', this.onUnload.bind(this));
 	}
 
 	private async onReady(): Promise<void> {
-		this.log.debug('Configured Mazda Region ' + this.config.region)
-		this.client = new MyMazda(this.config.email, this.config.password, <RegionCode>this.config.region);
-		this.path = 'mymazda.'
+		this.log.debug('Configured MyMazda account settings ' + this.config.region + ' @ ' + this.config.email)
+
 		this.setState('info.connection', true, true);
 		await this.fetchData()
 	}
 
-	private onUnload(callback: () => void): void {
-		try {
-			callback();
-		} catch (e) {
-			callback();
-		}
-	}
+	private async fetchData() {
+		this.log.debug('fetchData() called')
+		const client = new MyMazda(this.config.email, this.config.password, <RegionCode>this.config.region);
+		this.client = client;
 
+		//Loop through the registered vehicles
+		await client.getVehicles().then((vehicles) => {
+			vehicles.forEach(vehicle => {
+				this.setupVehicleStates(vehicle)
+				this.updateVehicleStates(vehicle)
+			})
+		})
+	}
 
 	private onObjectChange(id: string, obj: ioBroker.Object | null | undefined): void {
 		if (obj) {
@@ -58,45 +59,62 @@ class Mymazda extends utils.Adapter {
 		}
 	}
 
-	private async fetchData() {
-		let vehicles: any;
-		// eslint-disable-next-line prefer-const
-		vehicles = await this.client?.getVehicles();
-		this.log.debug(vehicles)
-		for (const vehicle of vehicles) {
-			const vehicle_id = vehicle.id;
-			//let status = this.client?.getVehicleStatus(vehicle_id)
-			await this.createVehicleObjectsIfNotExists(vehicle_id);
+	private onUnload(callback: () => void): void {
+		try {
+			callback();
+		} catch (e) {
+			callback();
 		}
 	}
 
-	// necessary batterypercentage, locked, drivenDistance
-	private async createVehicleObjectsIfNotExists(vehicle_id: number) {
-		this.log.info(String(vehicle_id))
-		if (this.path) {
-			this.createState(this.path, String('vehicle_id'), 'battery', {
+	// iobroker role norm: https://github.com/ioBroker/ioBroker/blob/master/doc/STATE_ROLES.md
+	private async setupVehicleStates(vehicle: any) { //todo fix with Client.Vehicle
+		//todo check if already available and exclude non-electric cars
+
+		//nickname
+		await this.createStateAsync(vehicle.vin, 'info', 'nickname', {
+			read: true,
+			role: 'info.name',
+			write: true,
+			desc: 'Nickname of vehicle',
+			type: 'string',
+		});
+
+		//kilometer
+		await this.createStateAsync(vehicle.vin, '', 'odometerkm', {
+			read: true,
+			role: 'value.distance',
+			write: true,
+			desc: 'Kilometer counter',
+			type: 'number',
+		});
+
+
+		//battery
+		if (vehicle.isElectric) {
+			await this.createStateAsync(vehicle.vin, '', 'battery', {
 				read: true,
+				role: 'value.battery',
 				write: true,
-				desc: 'Testdesc',
-				type: 'boolean',
+				desc: 'Battery percentage',
+				type: 'number',
 			});
 		}
 	}
 
-	private async createObjectIfNotExists(identifier: number, type: any, datatype: any, name: string, desc: string, role: string, read: boolean, write: boolean) {
-		await this.setObjectNotExistsAsync(identifier + '.' + name, {
-			type: type,
-			common: {
-				name: desc,
-				role: role,
-				type: datatype,
-				read: read,
-				write: write
-			},
-			native: {}
-		});
-		if (write) {
-			this.subscribeStates(identifier + '.' + name)
+	private async updateVehicleStates(vehicle: any){
+		await this.setStateAsync(vehicle.vin + '.info'+ '.nickname', vehicle.nickname)
+
+		//normal states
+		this.client?.getVehicleStatus(vehicle.id).then(vehicleStatus => {
+			this.setStateAsync(vehicle.vin + '.odometerkm', vehicleStatus.odometerKm)
+		})
+
+		// electro specific stuff
+		if (vehicle.isElectric) {
+			this.client?.getEVVehicleStatus(vehicle.id).then(evVehicleStatus => {
+				this.setStateAsync(vehicle.vin + '.battery', evVehicleStatus.chargeInfo.batteryLevelPercentage)
+			})
 		}
 	}
 
