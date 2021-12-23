@@ -8,6 +8,7 @@ declare global {
 			email: string;
 			password: string;
 			region: string;
+			pollInterval: number;
 		}
 	}
 }
