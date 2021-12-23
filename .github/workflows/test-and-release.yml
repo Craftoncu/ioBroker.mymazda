@@ -25,7 +25,7 @@ jobs:
         with:
           node-version: '14.x'
           # Uncomment the following line if your adapter cannot be installed using 'npm ci'
-          # install-command: 'npm install'
+          install-command: 'npm install'
           type-checking: true
           lint: true
 
@@ -45,7 +45,7 @@ jobs:
           node-version: ${{ matrix.node-version }}
           os: ${{ matrix.os }}
           # Uncomment the following line if your adapter cannot be installed using 'npm ci'
-          # install-command: 'npm install'
+          install-command: 'npm install'
           build: true
 
 # TODO: To enable automatic npm releases, create a token on npmjs.org
@@ -54,7 +54,7 @@ jobs:
 
   # Deploys the final package to NPM
   deploy:
-    needs: [check-and-lint, adapter-tests]
+    needs: [check-and-lint]
 
     # Trigger this step only when a commit on any branch is tagged with a version number
     if: |
@@ -69,7 +69,7 @@ jobs:
         with:
           node-version: '14.x'
           # Uncomment the following line if your adapter cannot be installed using 'npm ci'
-          # install-command: 'npm install'
+          install-command: 'npm install'
           build: true
           npm-token: ${{ secrets.NPM_TOKEN }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -78,9 +78,9 @@ jobs:
           # To enable create a API-Token in Sentry (User settings, API keys)
           # Enter this token as a GitHub secret (with name SENTRY_AUTH_TOKEN) in the repository options
           # Then uncomment and customize the following block:
-          sentry-token: ${{ secrets.SENTRY_AUTH_TOKEN }}
-          sentry-project: "iobroker-mymazda"
-          sentry-version-prefix: "iobroker.mymazda"
-          sentry-sourcemap-paths: "build/"
-          # If your sentry project is linked to a GitHub repository, you can enable the following option
-          # sentry-github-integration: true
+#          sentry-token: ${{ secrets.SENTRY_AUTH_TOKEN }}
+#          sentry-project: "iobroker-mymazda"
+#          sentry-version-prefix: "iobroker.mymazda"
+#          sentry-sourcemap-paths: "build/"
+#          # If your sentry project is linked to a GitHub repository, you can enable the following option
+#          # sentry-github-integration: true
