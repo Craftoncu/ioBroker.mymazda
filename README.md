@@ -17,6 +17,6 @@ Adapter for Mazda
 
 ## Changelog
 
-### **WORK IN PROGRESS**
+### 1.2.2 (2022-02-11)
 Changelog
 
