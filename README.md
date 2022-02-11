@@ -17,5 +17,6 @@ Adapter for Mazda
 
 ## Changelog
 
-	### **WORK IN PROGRESS**
+### **WORK IN PROGRESS**
+Changelog
 
