@@ -19,7 +19,7 @@
     "url": "https://github.com/Craftoncu/ioBroker.mymazda"
   },
   "dependencies": {
-    "@iobroker/adapter-core": "^2.5.1",
+    "@iobroker/adapter-core": "^2.6.0",
     "node-mymazda": "^1.1.2"
   },
   "devDependencies": {
